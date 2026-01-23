@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>DeChat · Node Operator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+:root{--bg:#0B0E14;--panel:#0F1522;--fg:#E5E7EB;--muted:#6B7280;--accent:#5EEAD4;--line:#1F2A3A;--shadow:0 20px 80px rgba(0,0,0,.45);}
+*{box-sizing:border-box;font-family:monospace}
+body{margin:0;min-height:100vh;background:radial-gradient(1000px 500px at 50% -10%, rgba(94,234,212,.10), transparent 55%),radial-gradient(900px 600px at 10% 110%, rgba(94,234,212,.08), transparent 60%),var(--bg);color:var(--fg);}
+.wrap{width:min(900px,92vw);margin:0 auto;padding:18px}
+.card{border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));box-shadow:var(--shadow);padding:14px;}
+h1{margin:0 0 8px 0;letter-spacing:.18em;font-size:1.1rem}
+.small{color:var(--muted);font-size:.85rem}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;margin-top:14px}
+.box{grid-column:span 12;border:1px solid var(--line);border-radius:16px;padding:14px;background:rgba(255,255,255,.02);}
+@media(min-width:820px){.box.third{grid-column:span 4;}}
+.big{font-size:1.8rem;letter-spacing:.10em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>DECHAT · NODE (LAN)</h1>
+    <div class="small">local operator view · refresh every 5s</div>
+    <div class="grid">
+      <div class="box third"><div class="small">Rooms</div><div class="big" id="rooms">—</div></div>
+      <div class="box third"><div class="small">Users</div><div class="big" id="users">—</div></div>
+      <div class="box third"><div class="small">Uptime</div><div class="big" id="uptime">—</div></div>
+    </div>
+    <div class="small" style="margin-top:14px" id="last">updating…</div>
+  </div>
+</div>
+<script>
+(async function(){
+  const rooms=document.getElementById('rooms');
+  const users=document.getElementById('users');
+  const uptime=document.getElementById('uptime');
+  const last=document.getElementById('last');
+  function nowStamp(){return new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});}
+  function fmtUptime(sec){sec=Math.max(0,sec|0);const h=Math.floor(sec/3600);const m=Math.floor((sec%3600)/60);return (h?`${h}h `:'')+`${m}m`;}
+  async function poll(){
+    try{
+      const r=await fetch('/stats',{cache:'no-store'});
+      const j=await r.json();
+      rooms.textContent=(j.activity && j.activity.roomsTotal) ?? '—';
+      users.textContent=(j.activity && j.activity.usersTotal) ?? '—';
+      uptime.textContent=fmtUptime((j.runtime && j.runtime.uptimeSec) || 0);
+      last.textContent=`updated ${nowStamp()}`;
+    }catch(e){ last.textContent=`error ${nowStamp()}`; }
+  }
+  poll(); setInterval(poll, 5000);
+})();
+</script>
+</body>
+</html>

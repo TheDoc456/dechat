@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>DeChat · Chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+:root{
+  --bg:#0B0E14;
+  --panel:#0F1522;
+  --panel2:#0C121E;
+  --fg:#E5E7EB;
+  --muted:#6B7280;
+  --accent:#5EEAD4;
+  --line:#1F2A3A;
+  --shadow:0 20px 80px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box;font-family:monospace}
+body{
+  margin:0;height:100vh;
+  background:radial-gradient(1000px 500px at 50% -10%, rgba(94,234,212,.10), transparent 55%),
+             radial-gradient(900px 600px at 10% 110%, rgba(94,234,212,.08), transparent 60%),
+             var(--bg);
+  color:var(--fg);
+  display:flex;align-items:center;justify-content:center;
+}
+.app{
+  width:min(1050px,95vw);
+  height:min(820px,94vh);
+  display:grid;
+  grid-template-columns:340px 1fr;
+  gap:14px;
+  padding:14px;
+}
+@media(max-width:900px){
+  .app{grid-template-columns:1fr;height:95vh}
+  .side{display:none}
+}
+.panel{
+  border:1px solid var(--line);
+  background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+  border-radius:18px;
+  box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.header{
+  padding:14px 14px 12px;
+  border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  background:rgba(255,255,255,.02);
+}
+.brand{display:flex;align-items:baseline;gap:10px}
+.logo{letter-spacing:.22em;font-size:1.2rem}
+.logo span{color:var(--accent)}
+.subtitle{color:var(--muted);font-size:.8rem}
+.badge{
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid rgba(94,234,212,.28);
+  background:rgba(94,234,212,.06);
+  color:var(--accent);
+  font-size:.78rem;
+  letter-spacing:.14em;
+}
+.side .body{padding:14px}
+.kv{
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:12px 12px;
+  background:rgba(255,255,255,.02);
+  margin-bottom:10px;
+}
+.kv .k{color:var(--muted);font-size:.78rem;margin-bottom:6px}
+.kv .v{font-size:.9rem;word-break:break-word}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+button{
+  appearance:none;border:none;cursor:pointer;
+  border-radius:12px;
+  padding:10px 12px;
+  font-size:.9rem;
+  color:var(--fg);
+  background:rgba(255,255,255,.05);
+  border:1px solid var(--line);
+  transition:transform .05s ease, background .15s ease, border-color .15s ease;
+}
+button:hover{background:rgba(255,255,255,.07);border-color:rgba(94,234,212,.20)}
+button:active{transform:translateY(1px)}
+button.primary{
+  background:rgba(94,234,212,.12);
+  border-color:rgba(94,234,212,.35);
+  color:var(--accent);
+}
+button.danger{
+  background:rgba(239,68,68,.10);
+  border-color:rgba(239,68,68,.25);
+  color:#fecaca;
+}
+.main{
+  display:flex;flex-direction:column;height:100%;
+}
+.chatTop{
+  padding:12px 14px;
+  border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.roomline{
+  display:flex;flex-direction:column;gap:4px
+}
+.roomline .title{font-size:.95rem;letter-spacing:.12em}
+.roomline .meta{color:var(--muted);font-size:.8rem}
+.statusDot{
+  width:10px;height:10px;border-radius:999px;
+  background:#374151;
+  box-shadow:0 0 0 4px rgba(55,65,81,.15);
+}
+.statusDot.ok{
+  background:var(--accent);
+  box-shadow:0 0 0 4px rgba(94,234,212,.13);
+}
+.scroller{
+  flex:1;
+  padding:14px;
+  overflow:auto;
+  background:linear-gradient(180deg, rgba(255,255,255,.01), rgba(255,255,255,.00));
+}
+.msgRow{display:flex;margin:10px 0}
+.msgRow.me{justify-content:flex-end}
+.bubble{
+  max-width:min(560px, 80%);
+  padding:10px 12px;
+  border-radius:18px;
+  line-height:1.45;
+  font-size:.92rem;
+  border:1px solid rgba(255,255,255,.06);
+  background:rgba(255,255,255,.05);
+  box-shadow:0 12px 30px rgba(0,0,0,.25);
+  word-break:break-word;
+}
+.msgRow.me .bubble{
+  background:linear-gradient(180deg, rgba(94,234,212,.20), rgba(94,234,212,.10));
+  border-color:rgba(94,234,212,.35);
+  color:var(--fg);
+}
+.bubble .time{
+  display:block;
+  margin-top:6px;
+  font-size:.72rem;
+  color:rgba(229,231,235,.65);
+}
+.msgRow.me .bubble .time{color:rgba(11,14,20,.7)}
+.system{
+  color:var(--muted);
+  font-size:.82rem;
+  text-align:center;
+  margin:10px 0;
+}
+.composer{
+  border-top:1px solid var(--line);
+  padding:12px;
+  display:flex;flex-direction:column;gap:10px;
+  background:rgba(255,255,255,.02);
+}
+.quick{
+  display:flex;gap:8px;flex-wrap:wrap;
+}
+.q{
+  padding:8px 10px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.04);
+  color:var(--muted);
+  font-size:.82rem;
+  cursor:pointer;
+}
+.q:hover{border-color:rgba(94,234,212,.20);color:var(--fg)}
+.row{
+  display:flex;gap:10px;align-items:center;
+}
+input[type="text"]{
+  flex:1;
+  border-radius:14px;
+  padding:12px 12px;
+  background:rgba(255,255,255,.04);
+  border:1px solid var(--line);
+  color:var(--fg);
+  outline:none;
+}
+input[type="text"]:focus{border-color:rgba(94,234,212,.35)}
+.smallmuted{color:var(--muted);font-size:.8rem}
+/* --- DeChat global header --- */
+.siteHeader{
+  width:100%;
+  border-bottom:1px solid rgba(107,114,128,.25);
+  background:rgba(15,21,34,.55);
+  backdrop-filter:blur(10px);
+}
+.siteHeader .inner{
+  width:min(1100px,92vw);
+  margin:0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:14px 0;
+}
+.siteHeader .brand{
+  letter-spacing:.22em;
+  font-size:1.05rem;
+  font-family: monospace;
+}
+.siteHeader .brand span{color:var(--accent)}
+.siteHeader nav{
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+.siteHeader a{
+  color:var(--muted);
+  text-decoration:none;
+  font-size:.85rem;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid transparent;
+  font-family: monospace;
+}
+.siteHeader a:hover{
+  color:var(--fg);
+  border-color:rgba(94,234,212,.25);
+  background:rgba(94,234,212,.06);
+}
+
+</style>
+</head>
+<body>
+  <header class="siteHeader">
+  <div class="inner">
+    <div class="brand">DE<span>CHAT</span></div>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/chat">Chat</a>
+      <a href="/network">Network</a>
+    </nav>
+  </div>
+</header>
+
+
+<div class="app">
+  <div class="panel side">
+    <div class="header">
+      <div>
+        <div class="brand">
+          <div class="logo">DE<span>CHAT</span></div>
+        </div>
+        <div class="subtitle">private · ephemeral · zero-log</div>
+      </div>
+      <div class="badge">CHAT</div>
+    </div>
+    <div class="body">
+      <div class="kv">
+        <div class="k">Router</div>
+        <div class="v" id="kvRouter">detecting…</div>
+      </div>
+      <div class="kv">
+        <div class="k">Room</div>
+        <div class="v" id="kvRoom">—</div>
+      </div>
+      <div class="kv">
+        <div class="k">User</div>
+        <div class="v" id="kvUser">—</div>
+      </div>
+      <div class="kv">
+        <div class="k">Node</div>
+        <div class="v" id="kvNode">—</div>
+      </div>
+
+      <div class="btnrow">
+        <button class="primary" id="btnBegin">Begin chat</button>
+        <button id="btnNewRoom">New room</button>
+        <button class="danger" id="btnLeave">Leave</button>
+      </div>
+
+      <div style="margin-top:12px" class="smallmuted">
+        Tip: share the Room ID with someone else so they join the same room.
+      </div>
+    </div>
+  </div>
+
+  <div class="panel main">
+    <div class="header">
+      <div class="brand">
+        <div class="logo">DE<span>CHAT</span></div>
+        <div class="subtitle" id="topSub">ready</div>
+      </div>
+      <div class="statusDot" id="dot"></div>
+    </div>
+
+    <div class="chatTop">
+      <div class="roomline">
+        <div class="title" id="roomTitle">NO ROOM</div>
+        <div class="meta" id="roomMeta">not connected</div>
+      </div>
+      <div class="badge" id="stickyBadge" style="display:none">STICKY</div>
+    </div>
+
+    <div class="scroller" id="scroller">
+      <div class="system">Press “Begin chat” to connect.</div>
+    </div>
+
+    <div class="composer">
+      <div class="quick" id="quick">
+        <div class="q">👍</div>
+        <div class="q">😂</div>
+        <div class="q">❤️</div>
+        <div class="q">Got it</div>
+        <div class="q">On my way</div>
+        <div class="q">One sec</div>
+        <div class="q">Thanks</div>
+        <div class="q">All good</div>
+      </div>
+
+      <div class="row">
+        <input id="msg" type="text" placeholder="Message…" autocomplete="off" />
+        <button class="primary" id="send">Send</button>
+      </div>
+      <div class="smallmuted" id="hint">messages are ephemeral and stored only in memory</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+(function(){
+  // Router base: defaults to same origin (served under /chat/)
+  const ROUTER_BASE = location.origin;
+
+  const el = (id)=>document.getElementById(id);
+  const scroller = el('scroller');
+  const msgInput = el('msg');
+  const dot = el('dot');
+
+  el('kvRouter').textContent = ROUTER_BASE;
+
+  let socket = null;
+  let state = {
+    roomId: null,
+    userId: null,
+    token: null,
+    nodeBaseUrl: null,
+    sticky: false
+  };
+
+  function setStatus(ok, text){
+    dot.classList.toggle('ok', !!ok);
+    el('topSub').textContent = text || (ok ? 'connected' : 'disconnected');
+    el('roomMeta').textContent = text || (ok ? 'connected' : 'not connected');
+  }
+
+  function systemLine(text){
+    const div = document.createElement('div');
+    div.className = 'system';
+    div.textContent = text;
+    scroller.appendChild(div);
+    scroller.scrollTop = scroller.scrollHeight;
+  }
+
+  function bubble(text, me){
+    const row = document.createElement('div');
+    row.className = 'msgRow' + (me ? ' me' : '');
+    const b = document.createElement('div');
+    b.className = 'bubble';
+    b.textContent = text;
+    const t = document.createElement('span');
+    t.className = 'time';
+    t.textContent = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    b.appendChild(t);
+    row.appendChild(b);
+    scroller.appendChild(row);
+    scroller.scrollTop = scroller.scrollHeight;
+  }
+
+  async function api(path, opts){
+    const res = await fetch(ROUTER_BASE + path, Object.assign({
+      headers: {'content-type':'application/json'}
+    }, opts || {}));
+    const data = await res.json().catch(()=>null);
+    if(!res.ok) throw new Error((data && data.error) || 'request_failed');
+    return data;
+  }
+
+  async function getNodes(){
+    const data = await api('/nodes', {method:'GET'});
+    return data.nodes || [];
+  }
+
+  async function pingNode(baseUrl){
+    const t0 = performance.now();
+    try{
+      const res = await fetch(baseUrl.replace(/\/+$/,'') + '/ping', {cache:'no-store'});
+      if(!res.ok) throw new Error('ping_bad');
+      const t1 = performance.now();
+      return Math.max(1, Math.round(t1 - t0));
+    }catch(e){
+      return null;
+    }
+  }
+
+  async function allocate(roomId){
+    const nodes = await getNodes();
+    if(nodes.length === 0) throw new Error('no_nodes');
+
+    systemLine('Testing node latency…');
+    const latencies = {};
+    await Promise.all(nodes.map(async n => {
+      const ms = await pingNode(n.baseUrl);
+      if(typeof ms === 'number') latencies[n.key] = ms;
+    }));
+
+    const data = await api('/allocate', {
+      method:'POST',
+      body: JSON.stringify({ roomId, latencies })
+    });
+    return data;
+  }
+
+  function connectNode(){
+    if(socket) { socket.disconnect(); socket = null; }
+    if(!state.nodeBaseUrl || !state.roomId || !state.token) return;
+
+    const url = state.nodeBaseUrl.replace(/\/+$/,'');
+    systemLine('Connecting to node…');
+
+    socket = io(url, {
+      transports: ['websocket', 'polling'],
+      auth: { token: state.token, roomId: state.roomId },
+      query: { userId: state.userId }
+    });
+
+    socket.on('connect', () => {
+      setStatus(true, 'connected');
+      systemLine('Connected.');
+    });
+
+    socket.on('disconnect', () => {
+      setStatus(false, 'disconnected');
+      systemLine('Disconnected.');
+    });
+
+    socket.on('room_info', (info) => {
+      el('roomTitle').textContent = state.roomId || 'NO ROOM';
+      el('kvRoom').textContent = state.roomId || '—';
+      el('kvUser').textContent = state.userId || '—';
+      el('kvNode').textContent = state.nodeBaseUrl || '—';
+      el('stickyBadge').style.display = state.sticky ? 'inline-flex' : 'none';
+      if(info && typeof info.userCount === 'number'){
+        el('roomMeta').textContent = `users: ${info.userCount} · ephemeral`;
+      }
+    });
+
+    socket.on('msg', (m) => {
+      if(!m || typeof m.text !== 'string') return;
+      const isMe = m.userId && state.userId && m.userId === state.userId;
+      bubble(m.text, isMe);
+    });
+
+    socket.on('system', (m) => {
+      if(m && m.text) systemLine(m.text);
+    });
+
+    socket.on('error_msg', (m) => {
+      systemLine('Error: ' + (m && m.error ? m.error : 'unknown'));
+    });
+  }
+
+  async function begin(roomOverride){
+    try{
+      setStatus(false, 'connecting…');
+      const roomId = roomOverride || null;
+      const alloc = await allocate(roomId);
+
+      state.roomId = alloc.roomId;
+      state.userId = alloc.userId;
+      state.token  = alloc.token;
+      state.nodeBaseUrl = alloc.node.baseUrl;
+      state.sticky = !!alloc.sticky;
+
+      el('roomTitle').textContent = state.roomId;
+      el('roomMeta').textContent = 'connecting…';
+      el('stickyBadge').style.display = state.sticky ? 'inline-flex' : 'none';
+
+      connectNode();
+    }catch(e){
+      setStatus(false, 'not connected');
+      systemLine('Failed: ' + e.message);
+    }
+  }
+
+  function leave(){
+    if(socket){ socket.disconnect(); socket = null; }
+    state = { roomId:null, userId:null, token:null, nodeBaseUrl:null, sticky:false };
+    el('roomTitle').textContent = 'NO ROOM';
+    el('roomMeta').textContent = 'not connected';
+    el('kvRoom').textContent = '—';
+    el('kvUser').textContent = '—';
+    el('kvNode').textContent = '—';
+    el('stickyBadge').style.display = 'none';
+    setStatus(false, 'not connected');
+    systemLine('Left.');
+  }
+
+  function send(){
+    const text = msgInput.value.trim();
+    if(!text) return;
+    msgInput.value = '';
+    if(!socket || !socket.connected){
+      systemLine('Not connected.');
+      return;
+    }
+    socket.emit('msg', { text });
+  }
+
+  // Quick taps
+  el('quick').addEventListener('click', (ev)=>{
+    const t = ev.target;
+    if(!t.classList.contains('q')) return;
+    msgInput.value = (msgInput.value ? msgInput.value + ' ' : '') + t.textContent;
+    msgInput.focus();
+  });
+
+  el('send').addEventListener('click', send);
+  msgInput.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter') send();
+  });
+
+  el('btnBegin').addEventListener('click', ()=>begin(null));
+  el('btnNewRoom').addEventListener('click', ()=>begin(null)); // allocate new random room
+  el('btnLeave').addEventListener('click', leave);
+
+  setStatus(false, 'not connected');
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+services:
+  dechat-router:
+    build: ../router
+    container_name: dechat-router
+    restart: unless-stopped
+    env_file:
+      - ../router/.env
+    ports:
+      - "127.0.0.1:8080:8080"

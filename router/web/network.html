@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>DeChat · Network</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+:root{
+  --bg:#0B0E14;
+  --panel:#0F1522;
+  --fg:#E5E7EB;
+  --muted:#6B7280;
+  --accent:#5EEAD4;
+  --line:#1F2A3A;
+  --shadow:0 20px 80px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box;font-family:monospace}
+body{
+  margin:0;min-height:100vh;
+  background:radial-gradient(1000px 500px at 50% -10%, rgba(94,234,212,.10), transparent 55%),
+             radial-gradient(900px 600px at 10% 110%, rgba(94,234,212,.08), transparent 60%),
+             var(--bg);
+  color:var(--fg);
+}
+.wrap{width:min(1100px,92vw);margin:0 auto;padding:18px}
+.top{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  margin:10px 0 14px;
+}
+.logo{letter-spacing:.22em;font-size:1.4rem}
+.logo span{color:var(--accent)}
+.sub{color:var(--muted);font-size:.85rem}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(12,1fr);
+  gap:14px;
+}
+.card{
+  grid-column:span 12;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+  box-shadow:var(--shadow);
+  padding:14px;
+}
+@media(min-width:860px){
+  .card.half{grid-column:span 6;}
+  .card.third{grid-column:span 4;}
+}
+h2{margin:0 0 10px 0;font-size:1rem;color:var(--accent);letter-spacing:.18em}
+.big{font-size:1.8rem;letter-spacing:.10em}
+.small{color:var(--muted);font-size:.85rem}
+.table{
+  width:100%;
+  border-collapse:collapse;
+  overflow:hidden;
+  border-radius:14px;
+  border:1px solid var(--line);
+}
+.table th,.table td{
+  padding:10px 10px;
+  border-bottom:1px solid var(--line);
+  text-align:left;
+  font-size:.9rem;
+}
+.table th{color:var(--muted);font-weight:700;background:rgba(255,255,255,.02)}
+.pill{
+  display:inline-flex;align-items:center;gap:8px;
+  border:1px solid rgba(94,234,212,.25);
+  background:rgba(94,234,212,.06);
+  color:var(--accent);
+  border-radius:999px;
+  padding:7px 10px;
+  font-size:.82rem;
+  letter-spacing:.12em;
+}
+.dot{
+  width:8px;height:8px;border-radius:999px;background:var(--accent);
+  box-shadow:0 0 0 4px rgba(94,234,212,.12);
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <div class="logo">DE<span>CHAT</span> · NETWORK</div>
+      <div class="sub">public global statistics · refresh every 5s · aggregate-only</div>
+    </div>
+    <div class="pill"><span class="dot"></span><span id="last">updating…</span></div>
+  </div>
+
+  <div class="grid">
+    <div class="card third">
+      <h2>ROUTERS ONLINE</h2>
+      <div class="big" id="routersOnline">—</div>
+      <div class="small" id="routersKnown">discovering…</div>
+    </div>
+    <div class="card third">
+      <h2>NODES ONLINE</h2>
+      <div class="big" id="nodesOnline">—</div>
+      <div class="small">aggregate across routers</div>
+    </div>
+    <div class="card third">
+      <h2>USERS / ROOMS</h2>
+      <div class="big" id="usersRooms">—</div>
+      <div class="small" id="stickyRooms">—</div>
+    </div>
+
+    <div class="card">
+      <h2>ROUTER SNAPSHOTS</h2>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Router</th>
+            <th>Uptime</th>
+            <th>Nodes</th>
+            <th>Rooms</th>
+            <th>Users</th>
+            <th>Sticky</th>
+            <th>Loadavg</th>
+            <th>Seen</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="8" class="small">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const seed = location.origin; // dashboard served from router
+  const lastEl = document.getElementById('last');
+  const tbody = document.getElementById('tbody');
+
+  let knownRouters = new Map(); // baseUrl -> { baseUrl, routerId, lastSeenMin }
+  let routerStats  = new Map(); // baseUrl -> stats payload
+
+  function fmtUptime(sec){
+    sec = Math.max(0, sec|0);
+    const h = Math.floor(sec/3600);
+    const m = Math.floor((sec%3600)/60);
+    return (h? `${h}h `:'') + `${m}m`;
+  }
+
+  function nowStamp(){
+    return new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  }
+
+  async function getJson(url){
+    const r = await fetch(url, {cache:'no-store'});
+    const j = await r.json().catch(()=>null);
+    if(!r.ok) throw new Error((j && j.error) || 'fetch_failed');
+    return j;
+  }
+
+  async function discover(){
+    try{
+      // always include seed router
+      knownRouters.set(seed, {baseUrl: seed, routerId: null, lastSeenMin: 0});
+
+      const data = await getJson(seed + '/public/routers');
+      const list = (data && data.routers) ? data.routers : [];
+      for(const r of list){
+        if(!r || !r.baseUrl) continue;
+        knownRouters.set(r.baseUrl, r);
+      }
+    }catch(e){}
+  }
+
+  async function poll(){
+    const urls = Array.from(knownRouters.keys()).slice(0, 50);
+
+    await Promise.all(urls.map(async baseUrl => {
+      try{
+        const s = await getJson(baseUrl.replace(/\/+$/,'') + '/public/stats');
+        routerStats.set(baseUrl, { ok:true, at:Date.now(), data:s });
+      }catch(e){
+        routerStats.set(baseUrl, { ok:false, at:Date.now(), error:e.message });
+      }
+    }));
+
+    render();
+  }
+
+  function render(){
+    let routersOnline = 0;
+    let nodes = 0;
+    let rooms = 0;
+    let users = 0;
+    let sticky = 0;
+
+    const rows = [];
+
+    for(const [baseUrl, entry] of routerStats.entries()){
+      const known = knownRouters.get(baseUrl);
+      const routerName = (known && (known.routerId || known.baseUrl)) ? (known.routerId || known.baseUrl) : baseUrl;
+
+      if(!entry.ok){
+        rows.push(`
+          <tr>
+            <td>${routerName}</td>
+            <td class="small" colspan="6">offline (${entry.error})</td>
+            <td class="small">${nowStamp()}</td>
+          </tr>
+        `);
+        continue;
+      }
+
+      const s = entry.data;
+      if(!s || !s.ok) continue;
+      routersOnline++;
+
+      const net = s.network || {};
+      nodes += (net.nodesOnline || 0);
+      rooms += (net.roomsTotal || 0);
+      users += (net.usersTotal || 0);
+      sticky += (net.stickyMappedRooms || 0);
+
+      const r = s.router || {};
+      const la = Array.isArray(r.loadavg) ? r.loadavg.map(x => Number(x).toFixed(2)).join(', ') : '—';
+
+      rows.push(`
+        <tr>
+          <td>${routerName}</td>
+          <td>${fmtUptime(r.uptimeSec || 0)}</td>
+          <td>${net.nodesOnline || 0}</td>
+          <td>${net.roomsTotal || 0}</td>
+          <td>${net.usersTotal || 0}</td>
+          <td>${net.stickyMappedRooms || 0}</td>
+          <td>${la}</td>
+          <td>${nowStamp()}</td>
+        </tr>
+      `);
+    }
+
+    document.getElementById('routersOnline').textContent = routersOnline;
+    document.getElementById('routersKnown').textContent = `known routers: ${knownRouters.size}`;
+    document.getElementById('nodesOnline').textContent = nodes;
+    document.getElementById('usersRooms').textContent = `${users} / ${rooms}`;
+    document.getElementById('stickyRooms').textContent = `sticky mapped rooms: ${sticky}`;
+    lastEl.textContent = `updated ${nowStamp()}`;
+
+    tbody.innerHTML = rows.length ? rows.join('') : `<tr><td colspan="8" class="small">No data</td></tr>`;
+  }
+
+  (async function init(){
+    await discover();
+    await poll();
+    setInterval(discover, 15000);
+    setInterval(poll, 5000); // ✅ every 5 seconds
+  })();
+})();
+</script>
+</body>
+</html>

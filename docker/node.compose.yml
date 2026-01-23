@@ -1,0 +1,10 @@
+services:
+  dechat-node:
+    build: ../node
+    container_name: dechat-node
+    restart: unless-stopped
+    env_file:
+      - ../node/.env
+    ports:
+      - "8081:8081"
+      - "9090:9090"

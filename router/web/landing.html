@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>DeChat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+:root{
+  --bg:#0B0E14;
+  --panel:#0F1522;
+  --fg:#E5E7EB;
+  --muted:#6B7280;
+  --accent:#5EEAD4;
+  --line:#1F2A3A;
+}
+*{box-sizing:border-box;font-family:monospace}
+body{
+  margin:0;min-height:100vh;
+  background:radial-gradient(1000px 500px at 50% -10%, rgba(94,234,212,.10), transparent 55%),
+             radial-gradient(900px 600px at 10% 110%, rgba(94,234,212,.08), transparent 60%),
+             var(--bg);
+  color:var(--fg);
+  display:flex;align-items:center;justify-content:center;
+}
+.wrap{width:min(900px,92vw);padding:28px}
+.card{
+  border:1px solid var(--line);
+  background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+  border-radius:18px;
+  padding:26px 22px;
+  box-shadow:0 20px 80px rgba(0,0,0,.45);
+}
+.top{
+  display:flex;gap:18px;align-items:center;justify-content:space-between;flex-wrap:wrap
+}
+.brand{display:flex;align-items:baseline;gap:10px}
+.logo{font-size:2.3rem;letter-spacing:.22em}
+.logo span{color:var(--accent)}
+.tag{color:var(--muted);font-size:.9rem}
+.pills{display:flex;gap:10px;flex-wrap:wrap}
+.pill{
+  border:1px solid var(--line);
+  border-radius:999px;
+  padding:8px 12px;
+  color:var(--muted);
+  background:rgba(255,255,255,.02);
+  font-size:.85rem;
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(12,1fr);
+  gap:14px;
+  margin-top:18px;
+}
+.box{
+  grid-column:span 12;
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:16px 14px;
+  background:rgba(255,255,255,.02);
+}
+@media(min-width:820px){
+  .box.half{grid-column:span 6;}
+  .box.third{grid-column:span 4;}
+}
+h2{margin:0 0 10px 0;font-size:1rem;color:var(--accent);letter-spacing:.18em}
+p{margin:0;color:var(--fg);opacity:.92;line-height:1.55;font-size:.92rem}
+.small{color:var(--muted);font-size:.85rem;margin-top:10px}
+hr{border:none;border-top:1px solid var(--line);margin:18px 0}
+.coming{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap
+}
+.badge{
+  color:var(--accent);
+  border:1px solid rgba(94,234,212,.35);
+  background:rgba(94,234,212,.07);
+  padding:8px 12px;border-radius:999px;
+  letter-spacing:.18em;
+}
+.footer{margin-top:14px;color:var(--muted);font-size:.8rem;opacity:.8}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="top">
+        <div>
+          <div class="brand">
+            <div class="logo">DE<span>CHAT</span></div>
+          </div>
+          <div class="tag">private · ephemeral · zero-log</div>
+        </div>
+        <div class="pills">
+          <div class="pill">latency-based routing</div>
+          <div class="pill">sticky rooms</div>
+          <div class="pill">auto-wipe</div>
+          <div class="pill">public network stats</div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="box half">
+          <h2>WHAT IT IS</h2>
+          <p>
+            DeChat is an ephemeral chat network. A router assigns you to the closest node by latency.
+            Rooms are hosted on nodes and automatically expire after inactivity.
+          </p>
+          <div class="small">No identity. No analytics. No stored chat history.</div>
+        </div>
+
+        <div class="box half">
+          <h2>HOW IT WORKS</h2>
+          <p>
+            Clients test node latency, request allocation from the router, then connect to the chosen node.
+            Rooms can be sticky (mapped to the same node) to keep conversations consistent.
+          </p>
+          <div class="small">Designed for Raspberry Pi nodes and VPS routers.</div>
+        </div>
+
+        <div class="box third">
+          <h2>PRIVACY</h2>
+          <p>Messages live only in memory and disappear after inactivity. No logs by default.</p>
+        </div>
+
+        <div class="box third">
+          <h2>STATUS</h2>
+          <p>Project is in active development with a public network health dashboard.</p>
+        </div>
+
+        <div class="box third">
+          <h2>OPEN STATS</h2>
+          <p>Global network performance stats are publicly accessible and refresh automatically.</p>
+        </div>
+
+        <div class="box">
+          <h2>NODE / ROUTER OPERATOR REWARDS</h2>
+          <p>
+            We plan to incentivise infrastructure by rewarding node and router operators with a cryptocurrency token
+            for keeping devices online and helping the network stay fast and reliable.
+          </p>
+          <div class="small">
+            Rewards are intended to reflect uptime, stability, and real network contribution (details coming soon).
+          </div>
+        </div>
+      </div>
+
+      <hr />
+
+      <div class="coming">
+        <div class="badge">COMING&nbsp;SOON</div>
+        <div class="footer">no logs · no identity · no trace</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
