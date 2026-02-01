@@ -1,16 +1,17 @@
-
-const express = require("express");
+/onst express = require("express");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const http = require("http");
 const path = require("path");
 const { Server } = require("socket.io");
 const cors = require("cors")
+
 const { Rooms } = require("./rooms");
 const { nodeStats } = require("./stats");
 const { nowMs, hmacHex } = require("./utils");
 
-const fetch = global.fetch || require("node-fetch");
+const NODE_PUBLIC_URL = process.env.NODE_PUBLIC_URL || "";
+const ROUTER_URL = process.env.ROUTER_URL || "";
 
 const NODE_PORT = Number(process.env.NODE_PORT || 8081);
 const OPERATOR_PORT = Number(process.env.OPERATOR_PORT || 9090);
@@ -19,17 +20,6 @@ const ROOM_IDLE_TTL_SEC = Number(process.env.ROOM_IDLE_TTL_SEC || 600);
 const ROOM_SWEEP_INTERVAL_SEC = Number(process.env.ROOM_SWEEP_INTERVAL_SEC || 20);
 const MAX_USERS_PER_ROOM = Number(process.env.MAX_USERS_PER_ROOM || 10);
 const MAX_ROOMS = Number(process.env.MAX_ROOMS || 500);
-
-const {
-  NODE_KEY,
-  NODE_SECRET,
-  NODE_PUBLIC_URL,
-  ROUTER_URL
-} = process.env;
-
-function env() {
-  return process.env;
-}
 
 if(!NODE_PUBLIC_URL) { console.error("NODE_PUBLIC_URL required"); process.exit(1); }
 if(!ROUTER_URL) { console.error("ROUTER_URL required"); process.exit(1); }
@@ -40,6 +30,33 @@ const rooms = new Rooms({
   maxRooms: Math.max(10, MAX_ROOMS|0)
 });
 setInterval(()=>rooms.sweep(), Math.max(5, ROOM_SWEEP_INTERVAL_SEC|0)*1000).unref();
+
+// Heartbeat/register to router using per-node secret
+async function register(){
+  try{
+    const ts = nowMs();
+    const roomsActive = rooms.roomCount();     // number of active rooms in memory
+    const usersActive = rooms.userCount();     // number of users currently in rooms
+
+    const payload = `${NODE_KEY}|${NODE_PUBLIC_URL}|${roomsActive}|${usersActive}|${ts}`;
+    const sig = hmacHex(NODE_SECRET, payload);
+
+    await fetch(`${ROUTER_URL.replace(/\/+$/,'')}/register`, {
+      method:"POST",
+      headers:{ "content-type":"application/json" },
+      body: JSON.stringify({
+        nodeKey: NODE_KEY,
+        publicUrl: NODE_PUBLIC_URL,
+        roomsActive,
+        usersActive,
+        ts,
+        sig
+      })
+    });
+  }catch(e){}
+}
+setInterval(register, 20_000).unref();
+register();
 
 // Public node server
 const app = express();
@@ -52,40 +69,62 @@ app.options("*", cors());
 app.get("/ping", (_req,res)=> res.status(200).send("pong"));
 app.get("/public/stats", (_req,res)=> res.json(nodeStats({ nodeKey:NODE_KEY, publicUrl:NODE_PUBLIC_URL, rooms })));
 
-async function register() {
-  try {
-    const ts = Date.now();
+const crypto = require("crypto");
+const fetch = global.fetch;
 
-    const roomsActive = Number(rooms.roomCount());
-    const usersActive = Number(rooms.userCount());
+const {
+  NODE_KEY,
+  NODE_SECRET,
+  NODE_PUBLIC_URL,
+  ROUTER_URL
+} = process.env;
 
-    const payload = `${NODE_KEY}|${String(NODE_PUBLIC_URL)}|${roomsActive}|${usersActive}|${ts}`;
-    const sig = hmacHex(NODE_SECRET, payload);
-
-    const res = await fetch(`${ROUTER_URL}/register`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        nodeKey: NODE_KEY,
-        publicUrl: String(NODE_PUBLIC_URL),
-        roomsActive,
-        usersActive,
-        ts,
-        sig
-      })
-    });
-
-    if (!res.ok) {
-      const txt = await res.text();
-      console.error(`[node] register failed: ${res.status} ${txt}`);
-    }
-  } catch (e) {
-    console.error("[node] register error:", e.message);
-  }
+function sign(payload) {
+  return crypto
+    .createHmac("sha256", NODE_SECRET)
+    .update(JSON.stringify(payload))
+    .digest("hex");
 }
 
-setInterval(register, 10_000).unref();
-register();
+async function register() {
+  const body = {
+    nodeKey: NODE_KEY,
+    publicUrl: NODE_PUBLIC_URL
+  };
+
+  const res = await fetch(`${ROUTER_URL}/public/register`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-node-key": NODE_KEY,
+      "x-node-signature": sign(body)
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    throw new Error(`Register failed: ${res.status}`);
+  }
+
+  console.log("[node] Registered with router");
+}
+
+async function heartbeat() {
+  const body = { ts: Date.now() };
+
+  await fetch(`${ROUTER_URL}/public/heartbeat`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-node-key": NODE_KEY,
+      "x-node-signature": sign(body)
+    },
+    body: JSON.stringify(body)
+  });
+}
+
+await register();
+setInterval(heartbeat, 10_000);
 
 const server = http.createServer(app);
 
@@ -148,8 +187,6 @@ io.on("connection", (socket)=>{
 });
 
 server.listen(NODE_PORT, ()=> console.log(`Node public listening :${NODE_PORT}`));
-setInterval(register, 15_000).unref();
-register();
 
 // Operator UI (LAN)
 const op = express();

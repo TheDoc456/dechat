@@ -1,58 +1,62 @@
-const { nowMs } = require("./utils");
-
 class Rooms {
-  constructor({ idleTtlMs, maxUsersPerRoom, maxRooms }){
-    this.idleTtlMs = idleTtlMs;
-    this.maxUsersPerRoom = maxUsersPerRoom;
-    this.maxRooms = maxRooms;
-    this.rooms = new Map(); // roomId -> { users:Set(userId), lastActivityMs }
+  constructor(opts = {}) {
+    this.idleTtlMs = Number(opts.idleTtlMs || 600_000);
+    this.maxUsersPerRoom = Number(opts.maxUsersPerRoom || 10);
+    this.maxRooms = Number(opts.maxRooms || 500);
+    this.rooms = new Map();
   }
 
-  ensure(roomId){
-    if(!this.rooms.has(roomId)){
-      if(this.rooms.size >= this.maxRooms) return null;
-      this.rooms.set(roomId, { users:new Set(), lastActivityMs: nowMs() });
+  roomCount() {
+    return this.rooms.size;
+  }
+
+  userCount() {
+    let total = 0;
+    for (const r of this.rooms.values()) total += r.users.size;
+    return total;
+  }
+
+  stats() {
+    return { rooms: this.roomCount(), users: this.userCount() };
+  }
+
+  touch(roomId) {
+    const r = this.rooms.get(roomId);
+    if (r) r.lastActiveMs = Date.now();
+  }
+
+  join(roomId, userId) {
+    if (!roomId || !userId) return { ok: false, error: "bad_request" };
+
+    let r = this.rooms.get(roomId);
+    if (!r) {
+      if (this.rooms.size >= this.maxRooms) return { ok: false, error: "rooms_full" };
+      r = { users: new Set(), lastActiveMs: Date.now() };
+      this.rooms.set(roomId, r);
     }
-    return this.rooms.get(roomId);
-  }
 
-  join(roomId, userId){
-    const r = this.ensure(roomId);
-    if(!r) return { ok:false, error:"max_rooms" };
-    if(r.users.size >= this.maxUsersPerRoom) return { ok:false, error:"room_full" };
+    if (!r.users.has(userId) && r.users.size >= this.maxUsersPerRoom) {
+      return { ok: false, error: "room_full" };
+    }
+
     r.users.add(userId);
-    r.lastActivityMs = nowMs();
-    return { ok:true, userCount:r.users.size };
+    r.lastActiveMs = Date.now();
+    return { ok: true, userCount: r.users.size };
   }
 
-  leave(roomId, userId){
+  leave(roomId, userId) {
     const r = this.rooms.get(roomId);
-    if(!r) return;
+    if (!r) return;
+
     r.users.delete(userId);
-    r.lastActivityMs = nowMs();
+    r.lastActiveMs = Date.now();
+    if (r.users.size === 0) this.rooms.delete(roomId);
   }
 
-  touch(roomId){
-    const r = this.rooms.get(roomId);
-    if(r) r.lastActivityMs = nowMs();
-  }
-
-  stats(){
-    let roomsTotal = 0;
-    let usersTotal = 0;
-    for(const r of this.rooms.values()){
-      roomsTotal++;
-      usersTotal += r.users.size;
-    }
-    return { roomsTotal, usersTotal };
-  }
-
-  sweep(){
-    const t = nowMs();
-    for(const [roomId, r] of this.rooms.entries()){
-      if(r.users.size === 0 && (t - r.lastActivityMs) > this.idleTtlMs){
-        this.rooms.delete(roomId);
-      }
+  sweep() {
+    const now = Date.now();
+    for (const [roomId, r] of this.rooms.entries()) {
+      if (now - (r.lastActiveMs || 0) > this.idleTtlMs) this.rooms.delete(roomId);
     }
   }
 }

@@ -1,0 +1,14 @@
+# Node
+node_modules/
+
+# Secrets
+.env
+*.env
+node-credentials.env
+
+# Docker
+dechat-node-data/
+*.log
+
+# OS
+.DS_Store

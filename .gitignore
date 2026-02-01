@@ -1,0 +1,13 @@
+# runtime / secrets
+**/data/
+**/data/**
+**/*.env
+**/node-credentials.env
+**/router.secret
+**/*.log
+
+# dependencies
+**/node_modules/
+
+# misc
+.DS_Store

@@ -12,7 +12,6 @@ const { nowMs, clamp, randId, randHex, hmacHex } = require("./utils");
 
 const PORT = Number(process.env.PORT || 8080);
 const ROUTER_PUBLIC_URL = process.env.ROUTER_PUBLIC_URL || "";
-const ROUTER_SECRET = process.env.ROUTER_SECRET || "";
 const STICKY_TTL_SEC = Number(process.env.STICKY_TTL_SEC || 86400);
 const MAX_NODES_RETURNED = Number(process.env.MAX_NODES_RETURNED || 50);
 const OPEN_JOIN = String(process.env.OPEN_JOIN || "0") === "1";

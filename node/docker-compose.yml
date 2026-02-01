@@ -1,0 +1,9 @@
+services:
+  dechat-node:
+    image: dechat/node
+    container_name: dechat-node
+    env_file:
+      - .env
+    volumes:
+      - dechat-node-data:/data
+    restart: unless-stopped
