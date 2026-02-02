@@ -1,0 +1,71 @@
+const fs = require("fs");
+const path = require("path");
+
+class NodeRegistry {
+  constructor(opts = {}) {
+    this.file = opts.file || process.env.REGISTRY_FILE || "/data/registry.json";
+    this.nodes = new Map();
+    this._load();
+  }
+
+  _load() {
+    try {
+      const raw = fs.readFileSync(this.file, "utf8");
+      const j = JSON.parse(raw);
+      if (j && Array.isArray(j.nodes)) {
+        for (const n of j.nodes) {
+          if (!n || !n.key) continue;
+          this.nodes.set(n.key, {
+            key: n.key,
+            publicUrl: n.publicUrl || "",
+            nodeSecret: n.nodeSecret || "",
+            lastSeen: n.lastSeen || 0,
+          });
+        }
+      }
+      console.log(`[registry] loaded ${this.nodes.size} node(s) from ${this.file}`);
+    } catch (_) {
+      // first boot: file doesn't exist yet
+      console.log(`[registry] no registry file yet (first boot): ${this.file}`);
+    }
+  }
+
+  _save() {
+    try {
+      fs.mkdirSync(path.dirname(this.file), { recursive: true });
+      const out = { nodes: Array.from(this.nodes.values()) };
+      fs.writeFileSync(this.file, JSON.stringify(out, null, 2), "utf8");
+    } catch (e) {
+      console.error("[registry] save failed:", e.message);
+    }
+  }
+
+  upsert({ key, publicUrl, nodeSecret }) {
+    const prev = this.nodes.get(key) || {};
+    const merged = {
+      key,
+      publicUrl: String(publicUrl || prev.publicUrl || ""),
+      nodeSecret: String(nodeSecret || prev.nodeSecret || ""),
+      lastSeen: Date.now(),
+    };
+    this.nodes.set(key, merged);
+    this._save();
+    return merged;
+  }
+
+  get(key) {
+    return this.nodes.get(key);
+  }
+
+  listInternal() {
+    const now = Date.now();
+    // Consider a node online if seen within last 90 seconds
+    return Array.from(this.nodes.values()).filter(n => n.nodeSecret && (now - (n.lastSeen || 0)) < 90_000);
+  }
+
+  listPublic() {
+    return this.listInternal().map(n => ({ key: n.key, baseUrl: n.publicUrl }));
+  }
+}
+
+module.exports = { NodeRegistry };

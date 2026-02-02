@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # runtime / secrets
 **/data/
 **/data/**
@@ -11,3 +12,25 @@
 
 # misc
 .DS_Store
+=======
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Env / secrets
+.env
+*.env
+**/*token*
+**/*secret*
+**/cloudflared.env
+
+# Runtime data / volumes
+/data/
+dechat-*-data/
+>>>>>>> 8f6cd8d (Update router)

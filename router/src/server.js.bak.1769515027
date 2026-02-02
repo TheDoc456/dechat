@@ -1,0 +1,241 @@
+const express = require("express");
+const helmet = require("helmet");
+const morgan = require("morgan");
+const compression = require("compression");
+const path = require("path");
+const os = require("os");
+const cors = require("cors");
+
+const { NodeRegistry } = require("./registry");
+const { StickyMap } = require("./sticky");
+const { JoinTokens } = require("./joinTokens");
+const { nowMs, clamp, randId, randHex, hmacHex } = require("./utils");
+
+const PORT = Number(process.env.PORT || 8080);
+const ROUTER_PUBLIC_URL = process.env.ROUTER_PUBLIC_URL || "";
+const ROUTER_SECRET = process.env.ROUTER_SECRET || "";
+const STICKY_TTL_SEC = Number(process.env.STICKY_TTL_SEC || 86400);
+const MAX_NODES_RETURNED = Number(process.env.MAX_NODES_RETURNED || 50);
+const OPEN_JOIN = String(process.env.OPEN_JOIN || "0") === "1";
+const OPEN_JOIN_TTL_SEC = Number(process.env.OPEN_JOIN_TTL_SEC || 900);
+const OPEN_JOIN_MAX_TOKENS = Number(process.env.OPEN_JOIN_MAX_TOKENS || 50);
+
+if(!ROUTER_SECRET || ROUTER_SECRET.length < 16){
+  console.error("ROUTER_SECRET missing/too short. Set it in router/.env");
+  process.exit(1);
+}
+
+const app = express();
+app.use(helmet({ contentSecurityPolicy:false }));
+app.use(compression());
+app.use(express.json({ limit:"256kb" }));
+app.use(morgan("tiny"));
+app.use(cors({
+  origin: "*",
+  methods: ["GET","POST","OPTIONS"],
+  allowedHeaders: ["content-type", "authorization"]
+}));
+app.options("*", cors());
+
+// --- CORS for public dashboard (dechat.app) ---
+app.use("/public", (req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Max-Age", "86400");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
+// Public: routers list (used by the network dashboard discover() call)
+app.get("/public/routers", (req, res) => {
+  // Prefer configured public URL; otherwise infer host.
+  const baseUrl =
+    (process.env.ROUTER_PUBLIC_URL && String(process.env.ROUTER_PUBLIC_URL).trim()) ||
+    ("https://" + req.get("host"));
+
+  res.json({
+    ok: true,
+    routers: [
+      {
+        routerId: "router",
+        baseUrl
+      }
+    ]
+  });
+});
+
+const registry = new NodeRegistry();
+const sticky = new StickyMap(STICKY_TTL_SEC);
+const joinTokens = new JoinTokens();
+
+setInterval(()=>sticky.sweep(), 30_000).unref();
+setInterval(()=>joinTokens.sweep(), 30_000).unref();
+
+// Web
+app.get("/", (_req,res)=> res.sendFile(path.join(__dirname, "..", "web", "landing.html")));
+app.get("/chat", (_req,res)=> res.sendFile(path.join(__dirname, "..", "web", "chat.html")));
+app.get("/network", (_req,res)=> res.sendFile(path.join(__dirname, "..", "web", "network.html")));
+
+// Public node list for clients
+app.get("/nodes", (_req,res)=>{
+  const nodes = registry.listPublic().slice(0, MAX_NODES_RETURNED);
+  res.json({ ok:true, nodes });
+});
+
+// Node heartbeat/register using per-node secret
+app.post("/register", (req,res)=>{
+  const { nodeKey, publicUrl, ts, sig } = req.body || {};
+  if(!nodeKey || !publicUrl || !ts || !sig) return res.status(400).json({ error:"bad_request" });
+
+  const node = registry.get(nodeKey);
+  if(!node || !node.nodeSecret) return res.status(401).json({ error:"unknown_node" });
+
+  const skew = Math.abs(nowMs() - Number(ts));
+  if(skew > 60_000) return res.status(401).json({ error:"ts_skew" });
+
+  const payload = `${nodeKey}|${publicUrl}|${ts}`;
+  const expected = hmacHex(node.nodeSecret, payload);
+  if(expected !== sig) return res.status(401).json({ error:"bad_sig" });
+
+  registry.upsert({ key: nodeKey, publicUrl, nodeSecret: node.nodeSecret });
+  res.json({ ok:true });
+});
+
+// Allocation: best latency + sticky mapping, token signed with nodeSecret
+app.post("/allocate", (req,res)=>{
+  const { roomId: reqRoomId, latencies } = req.body || {};
+  const nodes = registry.listInternal();
+  if(nodes.length === 0) return res.status(503).json({ error:"no_nodes" });
+
+  let roomId = (typeof reqRoomId === "string" && reqRoomId.trim()) ? reqRoomId.trim() : null;
+
+  // Sticky first
+  if(roomId){
+    const mappedKey = sticky.get(roomId);
+    if(mappedKey){
+      const n = registry.get(mappedKey);
+      if(n && n.nodeSecret){
+        const userId = randId("U-", 8);
+        const token = hmacHex(n.nodeSecret, `${roomId}|${userId}|${n.key}`);
+        return res.json({ ok:true, sticky:true, roomId, userId, token, node:{ key:n.key, baseUrl:n.publicUrl } });
+      }
+    }
+  }
+
+  // Choose by latency
+  const score = (node)=>{
+    const ms = latencies && typeof latencies === "object" ? latencies[node.key] : null;
+    const v = Number(ms);
+    if(!Number.isFinite(v) || v <= 0) return 999999;
+    return clamp(Math.round(v), 1, 120000);
+  };
+
+  const chosen = nodes
+    .map(n=>({n,s:score(n)}))
+    .sort((a,b)=>a.s-b.s)[0].n;
+
+  if(!roomId) roomId = randId("R-", 10);
+  sticky.set(roomId, chosen.key);
+
+  const userId = randId("U-", 8);
+  const token = hmacHex(chosen.nodeSecret, `${roomId}|${userId}|${chosen.key}`);
+
+  res.json({ ok:true, sticky:true, roomId, userId, token, node:{ key:chosen.key, baseUrl:chosen.publicUrl } });
+});
+
+// Public stats (aggregate only)
+app.get("/public/stats", (_req,res)=>{
+  const up = process.uptime();
+  const la = os.loadavg();
+  const mem = process.memoryUsage();
+  const nodes = registry.listInternal();
+  const stickyInfo = sticky.stats();
+
+  res.json({
+    ok:true,
+    at: nowMs(),
+    router: {
+      uptimeSec: Math.floor(up),
+      loadavg: la,
+      rssMb: Math.round(mem.rss/1024/1024),
+      heapUsedMb: Math.round(mem.heapUsed/1024/1024)
+    },
+    network: {
+      routersOnline: 1,
+      nodesOnline: nodes.length,
+      roomsTotal: 0,
+      usersTotal: 0,
+      stickyMappedRooms: stickyInfo.stickyMappedRooms
+    }
+  });
+});
+
+app.get("/public/routers", (req, res) => {
+  const baseUrl =
+    (process.env.ROUTER_PUBLIC_URL && String(process.env.ROUTER_PUBLIC_URL).trim()) ||
+    ("https://" + req.get("host"));
+
+  res.json({ ok: true, routers: [{ routerId: "router", baseUrl }] });
+});
+
+// Public: routers list (used by external dashboards for discovery)
+app.get("/public/routers", (_req, res) => {
+  const baseUrl =
+    ROUTER_PUBLIC_URL ||
+    `${_req.protocol}://${_req.get("host")}`;
+
+  res.json({
+    ok: true,
+    routers: [
+      {
+        routerId: "router",
+        baseUrl
+      }
+    ]
+  });
+});
+
+// ---- Token join endpoints ----
+
+let openJoinIssued = 0;
+
+// Public, no-auth join-token minting when OPEN_JOIN=1.
+// Use this only during onboarding. Disable by setting OPEN_JOIN=0.
+app.get("/.well-known/dechat-join", (req, res) => {
+  if(!OPEN_JOIN) return res.status(404).send("not_found");
+  if(openJoinIssued >= OPEN_JOIN_MAX_TOKENS) return res.status(429).json({ error: "join_limit" });
+  const t = joinTokens.mint(OPEN_JOIN_TTL_SEC);
+  openJoinIssued++;
+  return res.json({ ok:true, joinToken: t.token, expiresAt: t.expMs });
+});
+
+
+// Admin-only: mint join token
+app.post("/public/join-token", (req,res)=>{
+  const auth = String(req.headers.authorization || "");
+  const ok = auth === `Bearer ${ROUTER_SECRET}`;
+  if(!ok) return res.status(401).json({ error:"unauthorized" });
+
+  const ttlSec = Number((req.body && req.body.ttlSec) || 900); // 15 min default
+  const t = joinTokens.mint(ttlSec);
+  res.json({ ok:true, joinToken: t.token, expiresAt: t.expMs });
+});
+
+// Node uses join token to receive per-node secret
+app.post("/public/join", (req,res)=>{
+  const { joinToken, nodePublicUrl } = req.body || {};
+  if(!joinToken || !nodePublicUrl) return res.status(400).json({ error:"bad_request" });
+
+  const v = joinTokens.consume(String(joinToken));
+  if(!v) return res.status(401).json({ error:"bad_or_expired_token" });
+
+  const nodeKey = randId("DCN-", 11);
+  const nodeSecret = randHex(32); // 64 hex chars
+
+  registry.upsert({ key: nodeKey, publicUrl: String(nodePublicUrl), nodeSecret });
+
+  res.json({ ok:true, nodeKey, nodeSecret });
+});
+
+app.listen(PORT, ()=> console.log(`Router listening on :${PORT}`));

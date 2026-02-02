@@ -1,0 +1,15 @@
+# Node
+node_modules/
+
+# Secrets
+.env
+*.env
+/etc/dechat/
+router.secret
+
+# Docker
+dechat-router-data/
+*.log
+
+# OS
+.DS_Store
