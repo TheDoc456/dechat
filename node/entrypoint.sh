@@ -51,6 +51,14 @@ if [ -z "$NODE_KEY" ] || [ -z "$NODE_SECRET" ]; then
 
   NODE_KEY=$(echo "$RESP" | jq -r '.nodeKey')
   NODE_SECRET=$(echo "$RESP" | jq -r '.nodeSecret')
+  
+  export NODE_KEY NODE_SECRET
+
+# and also write them (you already do)
+cat > "$CREDS_FILE" <<EOF
+NODE_KEY=$NODE_KEY
+NODE_SECRET=$NODE_SECRET
+EOF
 
   if [ -z "$NODE_KEY" ] || [ "$NODE_KEY" = "null" ]; then
     echo "[node] Join failed"
@@ -80,4 +88,7 @@ echo "[node] Credentials OK: $NODE_KEY"
 # --------------------------------------------------
 # Start node
 # --------------------------------------------------
+set -a
+. "$CREDS_FILE"
+set +a
 exec node src/server.js
