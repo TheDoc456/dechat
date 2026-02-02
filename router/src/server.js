@@ -10,16 +10,12 @@ const os = require("os");
 const NodeRegistry = require("./registry");
 const registry = new NodeRegistry();
 registry.resetOnlineState();
-
+const { createProxyMiddleware } = require("http-proxy-middleware");
 const { StickyMap } = require("./sticky");
 const { JoinTokens } = require("./joinTokens");
 const { nowMs, clamp, randId, randHex, hmacHex } = require("./utils");
 const PORT = Number(process.env.PORT || 8080);
-<<<<<<< HEAD
 const ROUTER_PUBLIC_URL = process.env.ROUTER_PUBLIC_URL || "";
-=======
-const ROUTER_PUBLIC_URL = process.env.ROUTER_PUBLIC_URL || ""; // optional (used in /public/routers)
->>>>>>> 8f6cd8d (Update router)
 const STICKY_TTL_SEC = Number(process.env.STICKY_TTL_SEC || 86400);
 const MAX_NODES_RETURNED = Number(process.env.MAX_NODES_RETURNED || 50);
 const OPEN_JOIN = String(process.env.OPEN_JOIN || "0") === "1";
@@ -67,6 +63,30 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 app.use(express.json({ limit: "256kb" }));
 app.use(morgan("tiny"));
+
+app.use("/n/:nodeKey", (req, res, next) => {
+  try {
+    const nodeKey = req.params.nodeKey;
+    const n = registry.get(nodeKey);
+
+    if (!n || !n.wgIp) return res.status(404).send("node_not_found");
+
+    const target = "http://" + n.wgIp + ":8081";
+
+    return createProxyMiddleware({
+      target,
+      changeOrigin: true,
+      ws: true,
+      pathRewrite: function (pathReq) {
+        return pathReq.replace("/n/" + nodeKey, "");
+      },
+      proxyTimeout: 30000,
+    })(req, res, next);
+  } catch (e) {
+    console.error("[proxy] error", e);
+    res.status(500).send("proxy_error");
+  }
+});
 
 // State
 const sticky = new StickyMap(STICKY_TTL_SEC);
