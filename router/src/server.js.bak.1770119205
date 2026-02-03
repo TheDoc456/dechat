@@ -43,8 +43,12 @@ if (!ROUTER_SECRET || ROUTER_SECRET.length < 32) {
 const SECRET_PATH = "/data/router.secret";
 
 const app = express();
-app.use(express.json({ limit: "256kb" }));
 
+/**
+ * CORS: allow external hosted HTML dashboards/clients to call router APIs.
+ * This sets Access-Control-Allow-Origin: *
+ * and handles preflight OPTIONS.
+ */
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
@@ -54,19 +58,22 @@ app.use((req, res, next) => {
   next();
 });
 
+// Mount at /n so req.url looks like: /DCN-XXXX/ping, /DCN-XXXX/socket.io/...
 const nodeProxy = createProxyMiddleware({
-  target: "http://127.0.0.1",
+  target: "http://127.0.0.1", // dummy, overridden by router() below
   changeOrigin: true,
   ws: true,
   proxyTimeout: 30_000,
 
+  // Pick target per-request using the nodeKey in the URL
   router: (req) => {
+    // req.url is like "/DCN-ABC123/ping"
     const parts = (req.url || "").split("/").filter(Boolean);
     const nodeKey = parts[0];
     const n = nodeKey ? registry.get(nodeKey) : null;
 
-    if (!n || !n.publicUrl) return "http://127.0.0.1:9"; 
-    return n.publicUrl; 
+    if (!n || !n.publicUrl) return "http://127.0.0.1:9"; // will fail fast
+    return n.publicUrl; // can be http://node-1.dechat.app:8081
   },
 
   // Strip "/<nodeKey>" so node receives "/ping", "/socket.io/..", etc
@@ -143,27 +150,20 @@ app.get("/.well-known/dechat-join", (_req, res) => {
 app.post("/public/join", (req, res) => {
   try {
     let body = req.body;
-
-    // If body parser isn't working and body arrives as a string, try to parse it.
     if (typeof body === "string") {
-      try {
-        body = JSON.parse(body);
-      } catch (_) {
-        // ignore
-      }
-    }
-
+    try { body = JSON.parse(body); } catch (_) {}
+}
     body = body || {};
 
-    const joinToken = body.joinToken;
-    const nodePublicUrl = body.nodePublicUrl || body.publicUrl;
+   const joinToken = body.joinToken;
+   const nodePublicUrl = body.nodePublicUrl || body.publicUrl;
 
-    if (!joinToken || !nodePublicUrl) {
-      console.log("[join] content-type:", req.headers["content-type"]);
-      console.log("[join] raw body type:", typeof req.body);
-      console.log("[join] body:", req.body);
-      return res.status(400).json({ error: "missing_fields" });
-    }
+   if (!joinToken || !nodePublicUrl) {
+     console.log("[join] content-type:", req.headers["content-type"]);
+     console.log("[join] raw body type:", typeof req.body);
+     console.log("[join] body:", req.body);
+     return res.status(400).json({ error: "missing_fields" });
+}
 
     const [ts, nonce, sig] = String(joinToken).split(":");
     if (!ts || !nonce || !sig) {
@@ -188,13 +188,13 @@ app.post("/public/join", (req, res) => {
       nodeSecret,
       roomsActive: 0,
       usersActive: 0,
-      lastSeenAt: Date.now(),
+      lastSeenAt: Date.now()
     });
 
-    return res.json({ nodeKey, nodeSecret });
+    res.json({ nodeKey, nodeSecret });
   } catch (e) {
     console.error("Join failed:", e);
-    return res.status(500).json({ error: "join_failed" });
+    res.status(500).json({ error: "join_failed" });
   }
 });
 
