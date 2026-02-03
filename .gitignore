@@ -34,3 +34,5 @@ yarn-error.log*
 /data/
 dechat-*-data/
 >>>>>>> 8f6cd8d (Update router)
+*.bak
+*~
