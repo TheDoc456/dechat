@@ -104,42 +104,6 @@ If you see:
 
 …then your tunnel (or reverse proxy) was forwarding `/ping` but not `/socket.io`.
 
-### Cloudflare Tunnel with ingress config
-
-When you can manage the Cloudflare Tunnel host mapping, configure the hostname to point to the node’s local HTTP service.
-
-**Example `/etc/cloudflared/config.yml`:**
-
-```yaml
-tunnel: <YOUR_TUNNEL_UUID>
-credentials-file: /etc/cloudflared/<YOUR_TUNNEL_UUID>.json
-
-ingress:
-  - hostname: nodes.dechat.app
-    service: http://127.0.0.1:8081
-  - service: http_status:404
-```
-
-Restart:
-
-```bash
-sudo systemctl restart cloudflared
-sudo journalctl -u cloudflared -n 80 --no-pager
-```
-
-Verify from anywhere:
-
-```bash
-curl -i https://nodes.dechat.app/ping | head -n 20
-curl -i "https://nodes.dechat.app/socket.io/?EIO=4&transport=polling" | head -n 30
-```
-
-Expected:
-- `/ping` => **200 pong**
-- `/socket.io/?EIO=4&transport=polling` => **200** (NOT 404)
-
-> If `/socket.io` is 404 publicly but works locally, the tunnel/proxy is misrouted (wrong service target or wrong hostname route).
-
 ---
 
 ## 4) Router-side checks (does the router see this node?)
