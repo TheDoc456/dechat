@@ -1,8 +1,5 @@
 # DeChat Node (Worker) — Installation & Operations Guide
 
-This README is **Node-only** (the worker that hosts rooms + Socket.IO).  
-It assumes you already have (or will later deploy) a DeChat Router at `https://router.dechat.app`.
-
 ---
 
 ## What the Node does
