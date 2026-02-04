@@ -1,6 +1,7 @@
 # DeChat Node (Worker) — Installation & Operations Guide
 
 This README is **Node-only** (the worker that hosts rooms + Socket.IO).  
+It assumes you already have (or will later deploy) a DeChat Router at `https://router.dechat.app`.
 
 ---
 
@@ -34,6 +35,102 @@ A DeChat **Node** is a stateless room worker:
 - `git`
 - `docker`
 - `docker-compose` (optional; Docker alone is enough)
+
+---
+
+## If you **can’t use apt** (alternative installs)
+
+Some hosts block `apt-get` or you may not have root package access. You still have options.
+
+### Option A — Use Docker’s official install script (Debian/Ubuntu/RPi OS)
+
+If `curl` works and you *do* have sudo:
+
+```bash
+curl -fsSL https://get.docker.com | sudo sh
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER" || true
+```
+
+Then continue with the **clone + run** steps below.
+
+### Option B — Run the node **without git** (download zip)
+
+If GitHub HTTPS cloning is blocked but you can fetch files:
+
+```bash
+cd ~
+rm -rf dechat-main dechat
+curl -L -o dechat.zip https://github.com/TheDoc456/dechat/archive/refs/heads/main.zip
+unzip -q dechat.zip
+mv dechat-main dechat
+cd ~/dechat/node
+```
+
+Then build & run with Docker:
+
+```bash
+sudo docker volume create dechat-node-data >/dev/null
+sudo docker rm -f dechat-node 2>/dev/null || true
+sudo docker build --no-cache -t dechat-node .
+sudo docker run -d --name dechat-node --restart unless-stopped \
+  -p 8081:8081 -p 9090:9090 \
+  -v dechat-node-data:/data \
+  -e ROUTER_URL=https://router.dechat.app \
+  -e NODE_PUBLIC_URL=https://nodes.dechat.app \
+  dechat-node
+sudo docker logs -f --tail 200 dechat-node
+```
+
+### Option C — Build on another machine, then transfer the image
+
+If the node host has Docker but no external network access:
+
+1) On a machine that *can* build/pull:
+
+```bash
+git clone https://github.com/TheDoc456/dechat.git
+cd dechat/node
+docker build -t dechat-node:latest .
+docker save dechat-node:latest | gzip > dechat-node.tar.gz
+```
+
+2) Copy `dechat-node.tar.gz` to the node host (USB/SCP), then:
+
+```bash
+gunzip -c dechat-node.tar.gz | sudo docker load
+sudo docker volume create dechat-node-data >/dev/null
+sudo docker rm -f dechat-node 2>/dev/null || true
+sudo docker run -d --name dechat-node --restart unless-stopped \
+  -p 8081:8081 -p 9090:9090 \
+  -v dechat-node-data:/data \
+  -e ROUTER_URL=https://router.dechat.app \
+  -e NODE_PUBLIC_URL=https://nodes.dechat.app \
+  dechat-node:latest
+sudo docker logs -f --tail 200 dechat-node
+```
+
+### Option D — Cloudflared without apt
+
+If you can’t install via `apt`, you can:
+
+- Run cloudflared in Docker (recommended for locked-down hosts), or
+- Download the `cloudflared` binary/deb from Cloudflare Releases and install it manually.
+
+**Cloudflared as a container** (maps your `nodes.dechat.app` tunnel to `http://127.0.0.1:8081`):
+
+```bash
+# Put your tunnel credentials JSON + config.yml in ~/cloudflared/
+mkdir -p ~/cloudflared
+
+sudo docker run -d --name cloudflared --restart unless-stopped \
+  --network host \
+  -v ~/cloudflared:/etc/cloudflared \
+  cloudflare/cloudflared:latest \
+  tunnel run
+```
+
+> You still need your tunnel credentials + config in `~/cloudflared/`.
 
 ---
 
@@ -98,11 +195,20 @@ Expected:
 
 ## 3) Expose the node publicly (Cloudflare Tunnel)
 
-If you see:
-- `https://nodes.dechat.app/ping` works
-- but `https://nodes.dechat.app/socket.io/...` returned **404**
+Restart:
 
-…then your tunnel (or reverse proxy) was forwarding `/ping` but not `/socket.io`.
+Verify from anywhere:
+
+```bash
+curl -i https://nodes.dechat.app/ping | head -n 20
+curl -i "https://nodes.dechat.app/socket.io/?EIO=4&transport=polling" | head -n 30
+```
+
+Expected:
+- `/ping` => **200 pong**
+- `/socket.io/?EIO=4&transport=polling` => **200** (NOT 404)
+
+> If `/socket.io` is 404 publicly but works locally, the tunnel/proxy is misrouted (wrong service target or wrong hostname route).
 
 ---
 
